@@ -13,6 +13,9 @@ the two representatives below.
 
 All use only the axioms `propext`, `Classical.choice` and `Quot.sound`; there is no `native_decide`.
 
+Registered in Palomar as [PALOMAR-2026-11-24-000020](https://palomar-registry.org/entry.html?id=PALOMAR-2026-11-24-000020)
+(commit `171ab57f`, Lean and Mathlib 4.35.0).
+
 ## Definitions
 
 `R_d` is the free abelian group on the nonzero residues modulo `d`, and the length of an element is the sum of the absolute values
