@@ -1,0 +1,11 @@
+{
+  "challenge_module": "Challenge",
+  "solution_module": "Solution",
+  "theorem_names": [
+    "FermatLength.lenMod_xi44",
+    "FermatLength.lenMod_xi44_all",
+    "FermatLength.lenMod_xi52",
+    "FermatLength.lenMod_xi52_all"
+  ],
+  "permitted_axioms": ["propext", "Quot.sound", "Classical.choice"]
+}
