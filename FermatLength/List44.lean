@@ -19,9 +19,10 @@ module
 /-!
 # No balanced list of at most six residues modulo 44 has an odd number of elements of order 11
 
-The check `chk` runs over the ordered tuples of at most six residues, with the sums `S_t` (one for each unit `t`)
-packed in base 1024, and `chk_sound` proves that a successful check covers every balanced list of that length. It is
-evaluated by the kernel (`decide +kernel`), split by the first element for five and six residues.
+The check `chk` runs over the nondecreasing tuples of at most six residues with the right sum. The sums `S_t`, one for
+each unit `t`, are packed in base 1024, and the packed values of the residues are read from a table. `chk_sound` proves
+that a successful check covers every balanced list of that length. It is evaluated by the kernel (`decide +kernel`),
+split by the first element for six residues.
 -/
 
 @[expose] public section
@@ -104,12 +105,6 @@ theorem pk_stv_cons (x : Nat) (L : List Nat) : pk (stv (x :: L)) = V x + pk (stv
 
 theorem pk_stv_nil : pk (stv []) = 0 := by decide
 
-def chk : Nat → Nat → Nat → Nat → Nat → Nat → Bool
-  | 0, _, s, acc, c, T => if s == 0 then (!(acc == T) || c % 2 == 0) else true
-  | n + 1, lo, s, acc, c, T =>
-    forallFrom lo (44 - lo) (fun x =>
-      if Nat.ble (x * (n + 1)) s && Nat.ble s (x + 43 * n) then chk n x (s - x) (acc + V x) (c + o11 x) T else true)
-
 theorem sum_ge {x : Nat} : ∀ {L : List Nat}, (∀ y ∈ L, x ≤ y) → x * L.length ≤ L.sum
   | [], _ => by simp
   | y :: L, h => by
@@ -126,21 +121,48 @@ theorem sum_le : ∀ {L : List Nat}, (∀ y ∈ L, y ≤ 43) → L.sum ≤ 43 * 
     simp only [List.length_cons, List.sum_cons]
     omega
 
-theorem chk_sound (n : Nat) : ∀ (lo s acc c T : Nat) (L : List Nat), chk n lo s acc c T = true →
-    L.length = n →
-    L.Pairwise (· ≤ ·) → (∀ x ∈ L, lo ≤ x ∧ x ≤ 43) → L.sum = s → acc + pk (stv L) = T → (c + nu L) % 2 = 0 := by
+theorem forallFrom_complete {lo n : Nat} {p : Nat → Bool} (h : ∀ i, lo ≤ i → i < lo + n → p i = true) :
+    forallFrom lo n p = true := by
+  induction n generalizing lo with
+  | zero => rfl
+  | succ n ih =>
+    simp only [forallFrom, Bool.and_eq_true]
+    exact ⟨h lo (Nat.le_refl _) (by omega), ih (fun i h1 h2 => h i (by omega) (by omega))⟩
+
+/-- The numbers `V 1, …, V 43`, 256 bits each. -/
+def table : Nat := 0x403014070240d03c1104c1505c1906c1d07c23094270a42b00000000000000008060280e0481a078220982a008060280e0481a078220982a0000000000000000c0903c1506c2700407034130641f0942b0141105c1d08c29000000000000000100c0501c0900804018080280100c0501c090080401808028000000000000000140f064230041507c2901c1106c2500c0d05c2b024130742700000000000000018120782a028220080e06826018120782a028220080e068260000000000000001c1508c0504c030441f0040f0742b0341b0a41909c0905c2500000000000000020180a00c070100800405024020180a00c070100800405024000000000000000241b004130941d00c1509c0d07c0505c2903c070642b04423000000000000000281e0181a0082a04826038220281e0181a0082a04826038220000000000000002c2102c2102c0b0840b0840b0840b0840b0842102c2102c21000000000000000302404028050180101c020200302404028050180101c020200000000000000003427054030742504c0106c0908c110ac1901c0f0a4170141f000000000000000382a0680a09806088120081e0382a0680a09806088120081e0000000000000003c0107c1100c13014230540709417024270642906c0d0ac1d00000000000000040040901803020050080a01c040040901803020050080a01c00000000000000044070a41f0540108c1903c0509c1d04c090ac17034030941b000000000000000480a008260780e0182a0881a0480a008260780e0182a0881a0000000000000004c0d01c0109c1b0540f024030a42307417044050ac2507c19000000000000000501003008010280902007018050100300801028090200701800000000000000054130440f0340901c0500c010ac2909c2508c1f0741b0641700000000000000058160581605816058160581605816058160581605816058160000000000000005c1906c1d07c23094270a42b00403014070240d03c1104c15000000000000000601c080240a0040200c040140601c080240a0040200c04014000000000000000641f0942b0141105c1d08c2900c0903c1506c27004070341300000000000000068220a8060381e0980202812068220a8060381e09802028120000000000000006c2500c0d05c2b02413074270140f064230041507c2901c110000000000000007028020140800c060240101007028020140800c0602401010000000000000000742b0341b0a41909c0905c2501c1508c0504c030441f0040f000000000000000780204822018260281a0a80e0780204822018260281a0a80e0000000000000007c0505c2903c070642b044230241b004130941d00c1509c0d000000000000000800807004060140a0100900c0800807004060140a0100900c000000000000000840b0840b0842102c2102c2102c2102c2102c0b0840b0840b000000000000000880e098120a802068060780a0880e098120a802068060780a0000000000000008c110ac1901c0f0a4170141f03427054030742504c0106c090000000000000009014010200401c030280600809014010200401c03028060080000000000000009417024270642906c0d0ac1d03c0107c1100c130142305407000000000000000981a038020880a0a81e048060981a038020880a0a81e048060000000000000009c1d04c090ac17034030941b044070a41f0540108c1903c05000000000000000a020060100202407014030040a02006010020240701403004000000000000000a42307417044050ac2507c1904c0d01c0109c1b0540f02403000000000000000a8260881e068120380a018020a8260881e068120380a01802000000000000000ac2909c2508c1f0741b06417054130440f0340901c0500c010000000000000000000000000000000000000000000000000000000000000000
+
+/-- `V x`, read in the table. -/
+def look (x : Nat) : Nat := Nat.mod (Nat.shiftRight table (Nat.mul 256 x)) 115792089237316195423570985008687907853269984665640564039457584007913129639936
+
+theorem look_eq : ∀ x : Fin 44, look x.val = V x.val := by decide +kernel
+
+/-- `chk n lo s acc A T`: every nondecreasing list of `n` residues from `lo` on, with sum `s` and packed sums `T - acc`,
+has, together with `A`, an even number of residues of the chosen order. The bounds of the loop leave only the first
+elements that can be completed. -/
+def chk : Nat → Nat → Nat → Nat → List Nat → Nat → Bool
+  | 0, _, _, acc, A, T => cond (Nat.beq acc T) (Nat.beq (Nat.mod (nu A) 2) 0) true
+  | n + 1, lo, s, acc, A, T =>
+    let b := Nat.sub s (Nat.mul 43 n)
+    let a := cond (Nat.ble lo b) b lo
+    forallFrom a (Nat.sub (Nat.succ (Nat.div s (Nat.succ n))) a) (fun x =>
+      chk n x (Nat.sub s x) (Nat.add acc (look x)) (x :: A) T)
+
+theorem chk_sound (n : Nat) : ∀ (lo s acc T : Nat) (A L : List Nat), chk n lo s acc A T = true → L.length = n →
+    L.Pairwise (· ≤ ·) → (∀ x ∈ L, lo ≤ x ∧ x ≤ 43) → L.sum = s → acc + pk (stv L) = T →
+    nu (L.reverse ++ A) % 2 = 0 := by
   induction n with
   | zero =>
-    intro lo s acc c T L h hl _ _ hs hT
+    intro lo s acc T A L h hl _ _ hs hT
     have : L = [] := List.eq_nil_of_length_eq_zero hl
     subst this
-    simp only [List.sum_nil] at hs
-    subst hs
     rw [pk_stv_nil, Nat.add_zero] at hT
     subst hT
-    simpa [chk, nu] using h
+    have h' : cond (Nat.beq acc acc) (Nat.beq (Nat.mod (nu A) 2) 0) true = true := h
+    rw [Nat.beq_refl] at h'
+    exact Nat.eq_of_beq_eq_true h'
   | succ n ih =>
-    intro lo s acc c T L h hl hp hr hs hT
+    intro lo s acc T A L h hl hp hr hs hT
     cases L with
     | nil => exact absurd hl (by simp)
     | cons x L' =>
@@ -152,232 +174,59 @@ theorem chk_sound (n : Nat) : ∀ (lo s acc c T : Nat) (L : List Nat), chk n lo 
       rw [hl'] at hge
       have hle := sum_le (L := L') (fun y hy => (hr y (List.mem_cons_of_mem _ hy)).2)
       rw [hl'] at hle
-      have hin := forallFrom_sound h x hx.1 (by omega)
-      have hcond : (Nat.ble (x * (n + 1)) s && Nat.ble s (x + 43 * n)) = true := by
-        simp only [Bool.and_eq_true, Nat.ble_eq]
-        constructor
-        · rw [Nat.mul_succ]; omega
-        · omega
-      try dsimp only at hin
-      simp only [hcond, ↓reduceIte] at hin
-      rw [pk_stv_cons] at hT
-      have := ih x (s - x) (acc + V x) (c + o11 x) T L' hin hl' (List.pairwise_cons.mp hp).2
-        (fun y hy => ⟨hpx y hy, (hr y (List.mem_cons_of_mem _ hy)).2⟩) (by omega) (by omega)
-      simp only [nu, List.map_cons, List.sum_cons] at this ⊢
-      omega
+      have hdiv : x ≤ s / (n + 1) := by
+        rw [Nat.le_div_iff_mul_le (by omega), Nat.mul_succ]
+        omega
+      have h' : forallFrom (cond (Nat.ble lo (s - 43 * n)) (s - 43 * n) lo)
+          (s / (n + 1) + 1 - cond (Nat.ble lo (s - 43 * n)) (s - 43 * n) lo)
+          (fun x => chk n x (s - x) (acc + look x) (x :: A) T) = true := h
+      have ha : cond (Nat.ble lo (s - 43 * n)) (s - 43 * n) lo ≤ x := by
+        cases hc : Nat.ble lo (s - 43 * n)
+        · exact hx.1
+        · show s - 43 * n ≤ x
+          omega
+      have hin := forallFrom_sound h' x ha (by omega)
+      rw [pk_stv_cons, ← look_eq ⟨x, by omega⟩] at hT
+      have := ih x (s - x) (acc + look x) T (x :: A) L' hin hl' (List.pairwise_cons.mp hp).2
+        (fun y hy => ⟨hpx y hy, (hr y (List.mem_cons_of_mem _ hy)).2⟩) (by omega)
+        (by rw [Nat.add_assoc]; exact hT)
+      rw [List.reverse_cons, List.append_assoc]
+      exact this
 
-theorem forallFrom_complete {lo n : Nat} {p : Nat → Bool} (h : ∀ i, lo ≤ i → i < lo + n → p i = true) :
-    forallFrom lo n p = true := by
-  induction n generalizing lo with
-  | zero => rfl
-  | succ n ih =>
-    simp only [forallFrom, Bool.and_eq_true]
-    exact ⟨h lo (Nat.le_refl _) (by omega), ih (fun i h1 h2 => h i (by omega) (by omega))⟩
-theorem chk0 : chk 0 1 0 0 0 (22 * 0 * R) = true := by decide +kernel
-theorem chk1 : chk 1 1 22 0 0 (22 * 1 * R) = true := by decide +kernel
-theorem chk2 : chk 2 1 44 0 0 (22 * 2 * R) = true := by decide +kernel
-theorem chk3 : chk 3 1 66 0 0 (22 * 3 * R) = true := by decide +kernel
-theorem chk4 : chk 4 1 88 0 0 (22 * 4 * R) = true := by decide +kernel
+theorem chk0 : chk 0 1 0 0 [] 0 = true := by decide +kernel
+theorem chk1 : chk 1 1 22 0 [] 34557807403419145710579829942820701129509741801780491081750 = true := by decide +kernel
+theorem chk2 : chk 2 1 44 0 [] 69115614806838291421159659885641402259019483603560982163500 = true := by decide +kernel
+theorem chk3 : chk 3 1 66 0 [] 103673422210257437131739489828462103388529225405341473245250 = true := by decide +kernel
+theorem chk4 : chk 4 1 88 0 [] 138231229613676582842319319771282804518038967207121964327000 = true := by decide +kernel
+theorem chk5 : chk 5 1 110 0 [] 172789037017095728552899149714103505647548709008902455408750 = true := by decide +kernel
 
-theorem chk5_1 : chk 4 1 109 (0 + V 1) (0 + o11 1) (22 * 5 * R) = true := by
-  decide +kernel
+theorem chk6_1 : chk 5 1 131 67541734393237265599056984832161175420739463112396377164801 [1] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_2 : chk 5 2 130 65967853979636239776954309778735471188920871842801522841602 [2] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_3 : chk 5 3 129 64393973566035214014799874506197020511748606859616724198403 [3] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_4 : chk 5 4 128 62820093152434249519746495411984955503155215833420110245892 [4] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_5 : chk 5 5 127 61246212738896022596122939764313363592673790026982899072005 [5] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_6 : chk 5 6 126 59672332325294996833968447320787365176820137318262786508806 [6] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_7 : chk 5 7 125 58098451976000104381474853798524980546424586882415273726983 [7] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_8 : chk 5 8 124 56524571562399078559430664776913812561067731811906657214472 [8] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_9 : chk 5 9 123 54950756998215824378379568942519257811913613455556296600585 [9] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_10 : chk 5 10 122 53376876584677597454756013239125508853118650715359705856010 [10] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_11 : chk 5 11 121 51802996171076632959761120232450137139300532822008709284875 [11] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_12 : chk 5 12 120 50229115757475607197548198872374993167352994705978293260300 [12] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_13 : chk 5 13 119 48655235408180653418063738307448114869826129434042843569165 [13] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_14 : chk 5 14 118 47081354994579688923010416328501440551600589199622163965966 [14] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_15 : chk 5 15 117 45574904384839561169044267412844241124333739484573600842767 [15] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_16 : chk 5 16 116 44001023971238535347000078391233073138976884414064984330256 [16] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_17 : chk 5 17 115 42427143557637570851946756468008555869064881113403684297745 [17] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_18 : chk 5 18 114 40853328993454316670895660577891844071597225823293944113170 [18] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_19 : chk 5 19 113 39279448644159362891411257128230356464438211343134428771347 [19] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_20 : chk 5 20 112 37705568230621135967787644309571216815275397811161903677460 [20] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_21 : chk 5 21 111 36131687817020171532682504996246405361328333071375345404949 [21] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
+theorem chk6_22 : chk 5 22 110 34557807403419145710579829942820701129509741801780491081750 [22] 207346844420514874263478979656924206777058450810682946490500 = true := by decide +kernel
 
-theorem chk5_2 : chk 4 2 108 (0 + V 2) (0 + o11 2) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_3 : chk 4 3 107 (0 + V 3) (0 + o11 3) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_4 : chk 4 4 106 (0 + V 4) (0 + o11 4) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_5 : chk 4 5 105 (0 + V 5) (0 + o11 5) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_6 : chk 4 6 104 (0 + V 6) (0 + o11 6) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_7 : chk 4 7 103 (0 + V 7) (0 + o11 7) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_8 : chk 4 8 102 (0 + V 8) (0 + o11 8) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_9 : chk 4 9 101 (0 + V 9) (0 + o11 9) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_10 : chk 4 10 100 (0 + V 10) (0 + o11 10) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_11 : chk 4 11 99 (0 + V 11) (0 + o11 11) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_12 : chk 4 12 98 (0 + V 12) (0 + o11 12) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_13 : chk 4 13 97 (0 + V 13) (0 + o11 13) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_14 : chk 4 14 96 (0 + V 14) (0 + o11 14) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_15 : chk 4 15 95 (0 + V 15) (0 + o11 15) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_16 : chk 4 16 94 (0 + V 16) (0 + o11 16) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_17 : chk 4 17 93 (0 + V 17) (0 + o11 17) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_18 : chk 4 18 92 (0 + V 18) (0 + o11 18) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_19 : chk 4 19 91 (0 + V 19) (0 + o11 19) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_20 : chk 4 20 90 (0 + V 20) (0 + o11 20) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_21 : chk 4 21 89 (0 + V 21) (0 + o11 21) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5_22 : chk 4 22 88 (0 + V 22) (0 + o11 22) (22 * 5 * R) = true := by
-  decide +kernel
-
-theorem chk5 : chk 5 1 110 0 0 (22 * 5 * R) = true := by
-  show forallFrom 1 43 _ = true
-  apply forallFrom_complete
-  intro x h1 h2
-  match x, h1, h2 with
-  | 1, _, _ => exact chk5_1
-  | 2, _, _ => exact chk5_2
-  | 3, _, _ => exact chk5_3
-  | 4, _, _ => exact chk5_4
-  | 5, _, _ => exact chk5_5
-  | 6, _, _ => exact chk5_6
-  | 7, _, _ => exact chk5_7
-  | 8, _, _ => exact chk5_8
-  | 9, _, _ => exact chk5_9
-  | 10, _, _ => exact chk5_10
-  | 11, _, _ => exact chk5_11
-  | 12, _, _ => exact chk5_12
-  | 13, _, _ => exact chk5_13
-  | 14, _, _ => exact chk5_14
-  | 15, _, _ => exact chk5_15
-  | 16, _, _ => exact chk5_16
-  | 17, _, _ => exact chk5_17
-  | 18, _, _ => exact chk5_18
-  | 19, _, _ => exact chk5_19
-  | 20, _, _ => exact chk5_20
-  | 21, _, _ => exact chk5_21
-  | 22, _, _ => exact chk5_22
-  | x + 23, _, _ =>
-    split
-    · rename_i h
-      simp only [Bool.and_eq_true, Nat.ble_eq] at h
-      omega
-    · rfl
-
-theorem chk6_1 : chk 5 1 131 (0 + V 1) (0 + o11 1) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_2 : chk 5 2 130 (0 + V 2) (0 + o11 2) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_3 : chk 5 3 129 (0 + V 3) (0 + o11 3) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_4 : chk 5 4 128 (0 + V 4) (0 + o11 4) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_5 : chk 5 5 127 (0 + V 5) (0 + o11 5) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_6 : chk 5 6 126 (0 + V 6) (0 + o11 6) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_7 : chk 5 7 125 (0 + V 7) (0 + o11 7) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_8 : chk 5 8 124 (0 + V 8) (0 + o11 8) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_9 : chk 5 9 123 (0 + V 9) (0 + o11 9) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_10 : chk 5 10 122 (0 + V 10) (0 + o11 10) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_11 : chk 5 11 121 (0 + V 11) (0 + o11 11) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_12 : chk 5 12 120 (0 + V 12) (0 + o11 12) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_13 : chk 5 13 119 (0 + V 13) (0 + o11 13) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_14 : chk 5 14 118 (0 + V 14) (0 + o11 14) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_15 : chk 5 15 117 (0 + V 15) (0 + o11 15) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_16 : chk 5 16 116 (0 + V 16) (0 + o11 16) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_17 : chk 5 17 115 (0 + V 17) (0 + o11 17) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_18 : chk 5 18 114 (0 + V 18) (0 + o11 18) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_19 : chk 5 19 113 (0 + V 19) (0 + o11 19) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_20 : chk 5 20 112 (0 + V 20) (0 + o11 20) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_21 : chk 5 21 111 (0 + V 21) (0 + o11 21) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6_22 : chk 5 22 110 (0 + V 22) (0 + o11 22) (22 * 6 * R) = true := by
-  decide +kernel
-
-theorem chk6 : chk 6 1 132 0 0 (22 * 6 * R) = true := by
-  show forallFrom 1 43 _ = true
-  apply forallFrom_complete
-  intro x h1 h2
-  match x, h1, h2 with
-  | 1, _, _ => exact chk6_1
-  | 2, _, _ => exact chk6_2
-  | 3, _, _ => exact chk6_3
-  | 4, _, _ => exact chk6_4
-  | 5, _, _ => exact chk6_5
-  | 6, _, _ => exact chk6_6
-  | 7, _, _ => exact chk6_7
-  | 8, _, _ => exact chk6_8
-  | 9, _, _ => exact chk6_9
-  | 10, _, _ => exact chk6_10
-  | 11, _, _ => exact chk6_11
-  | 12, _, _ => exact chk6_12
-  | 13, _, _ => exact chk6_13
-  | 14, _, _ => exact chk6_14
-  | 15, _, _ => exact chk6_15
-  | 16, _, _ => exact chk6_16
-  | 17, _, _ => exact chk6_17
-  | 18, _, _ => exact chk6_18
-  | 19, _, _ => exact chk6_19
-  | 20, _, _ => exact chk6_20
-  | 21, _, _ => exact chk6_21
-  | 22, _, _ => exact chk6_22
-  | x + 23, _, _ =>
-    split
-    · rename_i h
-      simp only [Bool.and_eq_true, Nat.ble_eq] at h
-      omega
-    · rfl
+theorem chk6 : chk 6 1 132 0 [] 207346844420514874263478979656924206777058450810682946490500 = true := by
+  show forallFrom 1 22 (fun x => chk 5 x (Nat.sub 132 x) (Nat.add 0 (look x)) [x] 207346844420514874263478979656924206777058450810682946490500) = true
+  simp only [forallFrom, Bool.and_eq_true]
+  exact ⟨chk6_1, chk6_2, chk6_3, chk6_4, chk6_5, chk6_6, chk6_7, chk6_8, chk6_9, chk6_10, chk6_11, chk6_12, chk6_13, chk6_14, chk6_15, chk6_16, chk6_17, chk6_18, chk6_19, chk6_20, chk6_21, chk6_22, trivial⟩
 
 theorem St_one {L : List Nat} (hr : inRange L) : St 1 L = L.sum := by
   unfold St
@@ -418,7 +267,9 @@ theorem short_balanced {L : List Nat} (hr : inRange L) (hl : L.length ≤ 6) (he
     unfold stv
     rw [List.map_congr_left (fun t ht => (balanced_spec.mp he') t ht), pk_const]
     rfl
-  have key : ∀ n, n ≤ 6 → chk n 1 (22 * n) 0 0 (22 * n * R) = true := by
+  have key : ∀ n, n ≤ 6 → chk n 1 (22 * n) 0 [] (22 * n * R) = true := by
+    have hR : R = 1570809427428142986844537724673668233159533718262749594625 := by decide +kernel
+    rw [hR]
     intro n hn
     match n, hn with
     | 0, _ => exact chk0
@@ -428,10 +279,10 @@ theorem short_balanced {L : List Nat} (hr : inRange L) (hl : L.length ≤ 6) (he
     | 4, _ => exact chk4
     | 5, _ => exact chk5
     | 6, _ => exact chk6
-  have hp := chk_sound L'.length 1 (22 * L'.length) 0 0 (22 * L'.length * R) L' (key _ (by omega)) rfl hsort' hr'
+  have hp := chk_sound L'.length 1 (22 * L'.length) 0 (22 * L'.length * R) [] L' (key _ (by omega)) rfl hsort' hr'
     hsum hT
-  rw [← nu_perm hperm]
-  omega
-
+  rw [List.append_nil] at hp
+  rw [← nu_perm ((List.reverse_perm L').trans hperm)]
+  exact hp
 
 end FermatLength.List44
